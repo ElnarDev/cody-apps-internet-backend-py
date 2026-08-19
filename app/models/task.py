@@ -25,3 +25,7 @@ class TaskUpdate(SQLModel):
     title: Optional[str] = None
     description: Optional[str] = None
     completed: Optional[bool] = None
+
+# Schema para el endpoint de IA
+class TaskAiRequest(SQLModel):
+    prompt: str

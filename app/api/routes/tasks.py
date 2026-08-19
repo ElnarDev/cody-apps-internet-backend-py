@@ -2,7 +2,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from app.api.deps import SessionDep, CurrentUser
-from app.models.task import Task, TaskCreate, TaskPublic, TaskUpdate
+from app.models.task import Task, TaskCreate, TaskPublic, TaskUpdate, TaskAiRequest
 from app.services import task_service
 
 router = APIRouter()
@@ -19,12 +19,11 @@ def crear_tarea(session: SessionDep, current_user: CurrentUser, task_in: TaskCre
     return task_service.create_task(session=session, task_in=task_in)
 
 @router.post("/ai", response_model=TaskPublic)
-def crear_tarea_con_ia(session: SessionDep, current_user: CurrentUser, task_in: TaskCreate) -> Any:
+def crear_tarea_con_ia(session: SessionDep, current_user: CurrentUser, request: TaskAiRequest) -> Any:
     """
-    Crea una tarea e inyecta un consejo mágico de productividad usando Google Gemini AI.
-    Requiere que la variable GEMINI_API_KEY esté configurada.
+    Genera una tarea completa (título + descripción + consejo pirata) usando Gemini a partir de un prompt libre.
     """
-    return task_service.create_task_ai(session=session, task_in=task_in)
+    return task_service.create_task_ai(session=session, prompt=request.prompt)
 
 @router.patch("/{task_id}", response_model=TaskPublic)
 def actualizar_tarea(session: SessionDep, current_user: CurrentUser, task_id: int, task_in: TaskUpdate) -> Any:

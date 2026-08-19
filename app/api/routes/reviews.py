@@ -21,7 +21,7 @@ def read_reviews(
     )
 
 
-@router.post("/{product_id}/reviews", response_model=ReviewPublic)
+@router.post("/{product_id}", response_model=ReviewPublic)
 def create_review(
     *,
     session: SessionDep,

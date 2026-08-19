@@ -20,9 +20,12 @@ def get_reviews_by_product(
 def create_review(
     session: Session, review_in: ReviewCreate, user_id: int, product_id: int
 ) -> Review:
-    review_db = Review.model_validate(review_in)
-    review_db.user_id = user_id
-    review_db.product_id = product_id
+    review_db = Review(
+        rating=review_in.rating,
+        comment=review_in.comment,
+        user_id=user_id,
+        product_id=product_id,
+    )
 
     # --- 🤖 ANÁLISIS DE SENTIMIENTO CON IA ---
     if settings.GEMINI_API_KEY:

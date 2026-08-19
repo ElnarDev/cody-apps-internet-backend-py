@@ -2,6 +2,8 @@ from sqlmodel import Session, select
 from app.models.task import Task, TaskCreate, TaskUpdate
 from app.core.config import settings
 from google import genai
+import json
+import re
 
 # La Capa de Servicios se encarga EXCLUSIVAMENTE de la lógica.
 # Jamás sabe qué es una "Request" o "FastAPI". Separación absoluta.
@@ -24,24 +26,35 @@ def create_task(session: Session, task_in: TaskCreate) -> Task:
     return task_db
 
 
-def create_task_ai(session: Session, task_in: TaskCreate) -> Task:
-    task_db = Task.model_validate(task_in)
+def create_task_ai(session: Session, prompt: str) -> Task:
+    title = prompt[:80]
+    description = None
+    ai_suggestion = None
 
-    # --- 🤖 EFECTO WOW: SUGERENCIA DE INTELIGENCIA ARTIFICIAL ---
     if settings.GEMINI_API_KEY:
         try:
             client = genai.Client(api_key=settings.GEMINI_API_KEY)
-            prompt = f"Eres un asistente proactivo de productividad. El usuario tiene esta tarea: '{task_db.title}'. Descripción: '{task_db.description or 'Sin descripción'}'. En un máximo de 2 oraciones cortas, dale un consejo útil, local o motivador para esta tarea y responde como si fueras un pirata."
-
-            response = client.models.generate_content(
-                model="gemini-flash-latest", contents=prompt
+            gen_prompt = (
+                f"El usuario quiere crear una tarea sobre: '{prompt}'. "
+                "Devuelve ÚNICAMENTE un objeto JSON (sin markdown, sin texto extra) con exactamente estas 3 claves: "
+                '"title" (string, máximo 80 caracteres, título de la tarea), '
+                '"description" (string, obligatorio, 1 oración que explique qué hay que hacer), '
+                '"suggestion" (string, consejo motivador breve como si fueras un pirata). '
+                'Ejemplo: {"title":"Hacer queso cheddar","description":"Preparar queso cheddar artesanal siguiendo la receta tradicional.","suggestion":"¡Zarpa hacia los quesos, marinero!"}'
             )
-            task_db.ai_suggestion = response.text.strip()
+            response = client.models.generate_content(model="gemini-2.0-flash", contents=gen_prompt)
+            raw = response.text.strip()
+            match = re.search(r'\{.*\}', raw, re.DOTALL)
+            if match:
+                data = json.loads(match.group())
+                title = (data.get("title") or prompt)[:80]
+                description = data.get("description") or f"Completar la tarea relacionada con: {prompt}"
+                ai_suggestion = data.get("suggestion")
         except Exception as e:
-            print(f"Error generando sugerencia IA: {e}")
-            pass
-    # ------------------------------------------------------------
+            print(f"Error generando tarea con IA: {e}")
+            description = f"Completar la tarea relacionada con: {prompt}"
 
+    task_db = Task(title=title, description=description, ai_suggestion=ai_suggestion)
     session.add(task_db)
     session.commit()
     session.refresh(task_db)

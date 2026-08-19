@@ -24,10 +24,33 @@ def add_to_cart(session: Session, cart_in: CartItemCreate, user_id: int) -> Cart
         return existing_item
 
     # Si no existe, creamos un nuevo registro en el carrito
-    db_item = CartItem.model_validate(cart_in)
-    db_item.user_id = user_id
+    db_item = CartItem(
+        product_id=cart_in.product_id,
+        quantity=cart_in.quantity,
+        user_id=user_id,
+    )
 
     session.add(db_item)
     session.commit()
     session.refresh(db_item)
     return db_item
+
+
+def update_quantity(session: Session, item_id: int, user_id: int, quantity: int) -> CartItem | None:
+    item = session.get(CartItem, item_id)
+    if not item or item.user_id != user_id:
+        return None
+    item.quantity = quantity
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item
+
+
+def remove_item(session: Session, item_id: int, user_id: int) -> bool:
+    item = session.get(CartItem, item_id)
+    if not item or item.user_id != user_id:
+        return False
+    session.delete(item)
+    session.commit()
+    return True

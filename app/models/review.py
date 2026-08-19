@@ -20,6 +20,7 @@ class ReviewPublic(ReviewBase):
     ai_analysis: str | None = None  # Visible para el admin en la respuesta
 
 
-# Schema para Crear (el cliente solo envía rating y comment, nunca el análisis de IA)
-class ReviewCreate(ReviewBase):
-    pass
+# Schema para Crear (el cliente solo envía rating y comment)
+class ReviewCreate(SQLModel):
+    rating: int = Field(ge=1, le=5)
+    comment: str
