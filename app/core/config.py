@@ -11,12 +11,25 @@ class Settings(BaseSettings):
     
     # Base de Datos
     DATABASE_URL: str = "sqlite:///./fastapi.db"
+
+    # CORS (lista separada por comas). En producción agrega el dominio de Vercel.
+    BACKEND_CORS_ORIGINS: str = (
+        "http://localhost:4200,"
+        "http://127.0.0.1:4200,"
+        "http://localhost:8080,"
+        "http://127.0.0.1:8080"
+    )
     
     # Inteligencia Artificial
     GEMINI_API_KEY: str | None = None
     
     # Esta línea mágica le dice a Pydantic que lea automáticamente el archivo .env si existe
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Convierte BACKEND_CORS_ORIGINS (CSV) a lista limpia para FastAPI."""
+        return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",") if origin.strip()]
 
 # Instanciamos la clase para importar `settings` en cualquier parte de la app
 settings = Settings()

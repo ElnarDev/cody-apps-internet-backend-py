@@ -25,13 +25,8 @@ app = FastAPI(
 # Configuración Anti-CORS (Muy pedido en la clase teórica del Día 4)
 app.add_middleware(
     CORSMiddleware,
-    # Durante desarrollo acepta de cualquier Frontend Angular local
-    allow_origins=[
-        "http://localhost:4200",
-        "http://127.0.0.1:4200",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080",
-    ],
+    # Durante desarrollo y producción se controla por variable BACKEND_CORS_ORIGINS
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
