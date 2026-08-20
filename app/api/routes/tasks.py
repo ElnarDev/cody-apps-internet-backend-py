@@ -19,6 +19,12 @@ class PromptSuggestion(BaseModel):
     title: str
     description: str
 
+def get_zhipu_models() -> list[str]:
+    """Lee modelos candidatos desde ZHIPU_MODELS (CSV)."""
+    raw = os.getenv("ZHIPU_MODELS", "glm-4-plus,glm-4-air,glm-4-flash")
+    models = [m.strip() for m in raw.split(",") if m.strip()]
+    return models or ["glm-4-plus"]
+
 def get_zhipu_client() -> OpenAI:
     api_key = os.getenv("ZHIPU_API_KEY")
     if not api_key:
@@ -77,23 +83,33 @@ def suggest_task(request: PromptRequest, current_user: CurrentUser) -> PromptSug
     {"title": "string", "description": "string"}
     """
     
-    # Llamada al modelo GLM-4-Flash
+    # Llamada al modelo con fallback de candidatos para evitar fallos por nombre inválido.
     client = get_zhipu_client()
+    models = get_zhipu_models()
 
-    try:
-        response = client.chat.completions.create(
-            model="glm-4-flash",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": request.prompt}
-            ],
-            temperature=0.3, # Baja temperatura para respuestas lógicas y predecibles
+    response = None
+    last_error: str | None = None
+    for model_name in models:
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": request.prompt}
+                ],
+                temperature=0.3, # Baja temperatura para respuestas lógicas y predecibles
+            )
+            break
+        except Exception as exc:
+            last_error = str(exc)
+
+    if response is None:
+        detail = (
+            "No se pudo generar la sugerencia con IA. "
+            f"Modelos probados: {', '.join(models)}. "
+            f"Último error: {last_error or 'sin detalle'}"
         )
-    except Exception:
-        raise HTTPException(
-            status_code=502,
-            detail="No se pudo contactar el servicio de IA. Intenta nuevamente en unos segundos."
-        )
+        raise HTTPException(status_code=502, detail=detail)
 
     content = response.choices[0].message.content
     if not content:
