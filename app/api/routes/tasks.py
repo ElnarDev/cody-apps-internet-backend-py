@@ -80,14 +80,20 @@ def suggest_task(request: PromptRequest, current_user: CurrentUser) -> PromptSug
     # Llamada al modelo GLM-4-Flash
     client = get_zhipu_client()
 
-    response = client.chat.completions.create(
-        model="glm-4-flash",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": request.prompt}
-        ],
-        temperature=0.3, # Baja temperatura para respuestas lógicas y predecibles
-    )
+    try:
+        response = client.chat.completions.create(
+            model="glm-4-flash",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": request.prompt}
+            ],
+            temperature=0.3, # Baja temperatura para respuestas lógicas y predecibles
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="No se pudo contactar el servicio de IA. Intenta nuevamente en unos segundos."
+        )
 
     content = response.choices[0].message.content
     if not content:
