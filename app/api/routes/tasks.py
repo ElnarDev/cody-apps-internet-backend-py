@@ -3,9 +3,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import json
 import os
+import re
 from openai import OpenAI
+from google import genai
 
 from app.api.deps import SessionDep, CurrentUser
+from app.core.config import settings
 from app.models.task import TaskCreate, TaskPublic, TaskUpdate, TaskAiRequest
 from app.services import task_service
 
@@ -21,7 +24,7 @@ class PromptSuggestion(BaseModel):
 
 def get_zhipu_models() -> list[str]:
     """Lee modelos candidatos desde ZHIPU_MODELS (CSV)."""
-    raw = os.getenv("ZHIPU_MODELS", "glm-4-plus,glm-4-air,glm-4-flash")
+    raw = os.getenv("ZHIPU_MODELS", "glm-4,glm-4-plus,glm-4-air,glm-4-flash,glm-3-turbo")
     models = [m.strip() for m in raw.split(",") if m.strip()]
     return models or ["glm-4-plus"]
 
@@ -36,6 +39,35 @@ def get_zhipu_client() -> OpenAI:
         api_key=api_key,
         base_url="https://open.bigmodel.cn/api/paas/v4/"
     )
+
+def suggest_with_gemini(prompt: str) -> tuple[PromptSuggestion | None, str | None]:
+    """Intenta generar sugerencia con Gemini y devuelve (resultado, error)."""
+    if not settings.GEMINI_API_KEY:
+        return None, "GEMINI_API_KEY no configurada"
+
+    try:
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        model_name = os.getenv("GEMINI_SUGGEST_MODEL", "gemini-2.0-flash")
+        response = client.models.generate_content(
+            model=model_name,
+            contents=(
+                "Eres un asistente de productividad. "
+                "Devuelve SOLO JSON con estructura exacta: "
+                '{"title":"string","description":"string"}. '
+                f"Prompt del usuario: {prompt}"
+            ),
+        )
+
+        raw = (response.text or "").strip()
+        if not raw:
+            return None, "Gemini no devolvió contenido"
+
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        payload = match.group() if match else raw
+        data = json.loads(payload)
+        return PromptSuggestion(**data), None
+    except Exception as exc:
+        return None, str(exc)
 
 # Observa que todas las peticiones exigen `current_user: CurrentUser`. 
 # Esto hace que nadie anónimo pueda ver ni tocar las tareas. Seguridad de borde por Defecto.
@@ -84,30 +116,41 @@ def suggest_task(request: PromptRequest, current_user: CurrentUser) -> PromptSug
     """
     
     # Llamada al modelo con fallback de candidatos para evitar fallos por nombre inválido.
-    client = get_zhipu_client()
+    client: OpenAI | None = None
+    zhipu_bootstrap_error: str | None = None
+    try:
+        client = get_zhipu_client()
+    except HTTPException as exc:
+        zhipu_bootstrap_error = str(exc.detail)
+
     models = get_zhipu_models()
 
     response = None
     last_error: str | None = None
-    for model_name in models:
-        try:
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": request.prompt}
-                ],
-                temperature=0.3, # Baja temperatura para respuestas lógicas y predecibles
-            )
-            break
-        except Exception as exc:
-            last_error = str(exc)
+    if client is not None:
+        for model_name in models:
+            try:
+                response = client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": request.prompt}
+                    ],
+                    temperature=0.3, # Baja temperatura para respuestas lógicas y predecibles
+                )
+                break
+            except Exception as exc:
+                last_error = str(exc)
 
     if response is None:
+        gemini_result, gemini_error = suggest_with_gemini(request.prompt)
+        if gemini_result is not None:
+            return gemini_result
+
         detail = (
             "No se pudo generar la sugerencia con IA. "
-            f"Modelos probados: {', '.join(models)}. "
-            f"Último error: {last_error or 'sin detalle'}"
+            f"Zhipu: {zhipu_bootstrap_error or last_error or 'sin detalle'}. "
+            f"Gemini: {gemini_error or 'sin detalle'}."
         )
         raise HTTPException(status_code=502, detail=detail)
 
