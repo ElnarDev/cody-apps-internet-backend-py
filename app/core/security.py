@@ -16,7 +16,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     """Transforma una cadena plana en un hash seguro e irreversible."""
     password_bytes = password.encode('utf-8')[:72]
-    salt = bcrypt.gensalt()
+    # Ajustable por entorno para balancear seguridad y performance.
+    rounds = max(4, min(settings.BCRYPT_ROUNDS, 16))
+    salt = bcrypt.gensalt(rounds=rounds)
     hashed_bytes = bcrypt.hashpw(password_bytes, salt)
     return hashed_bytes.decode('utf-8')
 

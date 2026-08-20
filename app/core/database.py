@@ -5,7 +5,8 @@ from app.core.config import settings
 # connect_args={"check_same_thread": False} es necesario SOLO para SQLite
 engine = create_engine(
     settings.DATABASE_URL, 
-    echo=True, # Imprime queries SQL (bueno para depurar en el curso)
+    # En producción conviene desactivar para reducir latencia y ruido en logs.
+    echo=settings.SQL_ECHO,
     connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
 )
 

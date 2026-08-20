@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     
     # Base de Datos
     DATABASE_URL: str = "sqlite:///./fastapi.db"
+    SQL_ECHO: bool = False
+
+    # Seguridad de hashing (bcrypt). Menor valor = más rápido, menor costo criptográfico.
+    BCRYPT_ROUNDS: int = 12
 
     # CORS (lista separada por comas). En producción agrega el dominio de Vercel.
     BACKEND_CORS_ORIGINS: str = (
